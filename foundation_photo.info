@@ -1,0 +1,9 @@
+name = Foundation Photo
+description = Foundation Photo
+core = 7.x
+version = 7.x-1.0
+project = foundation_photo
+project path = sites/all/modules/third
+
+dependencies[] = ctools
+dependencies[] = file

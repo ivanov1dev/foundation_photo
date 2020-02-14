@@ -1,0 +1,337 @@
+<?php
+
+/**
+ * Implements hook_field_info().
+ */
+function foundation_photo_field_info() {
+  return [
+    'photo' => [
+      'label' => 'Фото',
+      'description' => 'Поле фото',
+      'default_widget' => 'photo_default',
+      'default_formatter' => 'photo_default',
+      'instance_settings' => array(
+        'file_extensions' => 'jpeg jpg png',
+        'file_directory' => '',
+        'max_filesize' => '',
+        'description_field' => 0,
+        'width' => 0,
+        'height' => 0,
+      ),
+    ],
+  ];
+}
+
+/**
+ * Implements hook_field_instance_settings_form().
+ */
+function foundation_photo_field_instance_settings_form($field, $instance) {
+  module_load_include('inc', 'file', 'file.field');
+  $settings = $instance['settings'];
+  $form = file_field_instance_settings_form($field, $instance);
+  $form['description_field']['#access'] = FALSE;
+
+  $form['width'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Width'),
+    '#default_value' => $settings['width'],
+    '#weight' => 6,
+  );
+
+  $form['height'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Height'),
+    '#default_value' => $settings['height'],
+    '#weight' => 7,
+  );
+  return $form;
+}
+
+/**
+ * Implements hook_field_is_empty().
+ */
+function foundation_photo_field_is_empty($item, $field) {
+  return file_field_is_empty($item, $field);
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function foundation_photo_field_widget_info() {
+  return [
+    'photo_default' => [
+      'label' => 'Фото',
+      'field types' => ['photo'],
+      'settings' => [],
+      'behaviors' => [
+        'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+        'default value' => FIELD_BEHAVIOR_NONE,
+      ],
+    ],
+  ];
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function foundation_photo_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+
+  if ($instance['widget']['type'] == 'photo_default') {
+
+    ctools_include('modal');
+    ctools_include('ajax');
+    ctools_modal_add_js();
+
+    $default_value = isset($items[$delta]['fid']) ? $items[$delta]['fid'] : NULL;
+
+    $element_id = sprintf('wrapper-%s-%s-%d-entity-crud-widget', $element['#bundle'], $element['#field_name'], $delta);
+
+    drupal_add_library('system', 'drupal.ajax');
+
+    $url_data = implode('/', [
+      $instance['entity_type'],
+      $instance['bundle'],
+      $instance['field_name'],
+      $delta,
+    ]);
+
+    $url_take = l('', 'photo/nojs/take-photo/' . $url_data, [
+      'html' => TRUE,
+      'attributes' => [
+        'class' => [
+          'ctools-use-modal',
+          'btn-photo-default-widget-take-photo btn-field-photo btn btn-lite glyphicon glyphicon-camera'
+        ],
+        'title' => t('Take photo'),
+      ],
+    ]);
+
+    $url_upload = l('', 'photo/nojs/upload-photo/' . $url_data, [
+      'html' => TRUE,
+      'attributes' => [
+        'class' => [
+          'ctools-use-modal',
+          'btn-photo-default-widget-take-photo btn-field-photo btn btn-lite glyphicon glyphicon-level-up'
+        ],
+        'title' => t('Upload photo'),
+      ],
+    ]);
+
+    $widget = [
+      '#type' => 'container',
+      '#theme_wrappers' => ['form_element'],
+      '#prefix' => '<div id="' . $element_id . '" data-delta="' . $delta . '" class="field-photo-container field-photo-container-' . $instance['field_name'] . ' field-photo-container-' . $delta . '">',
+      '#suffix' => '</div>',
+      'take_photo' => [
+        '#markup' => $url_take,
+      ],
+      'upload_photo' => [
+        '#markup' => $url_upload,
+      ],
+      'fid' => [
+        '#type' => 'hidden',
+        '#default_value' => $default_value,
+        '#field_parents' => [],
+        '#field_name' => $field["field_name"],
+        '#language' => $langcode,
+        '#delta' => $delta,
+        '#element_validate' => ['foundation_photo_field_photo_validate'],
+        '#pre_render' => ['foundation_photo_field_photo_pre_render'],
+      ],
+      'photo_preview' => [
+        '#prefix' => '<div class="photo-preview-wrapper">',
+        '#markup' => '<div class="photo-preview" data-field="'. $instance['field_name'] .'" data-delta="'. $delta .'">
+        <button type="button" class="close" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>',
+        '#suffix' => '</div>',
+      ],
+      '#attached' => [
+        'js' => [
+          [
+            'data' => [
+              'fieldPhotoSettings' => [
+                $field['field_name'] => [
+                  'entity_type' => $instance['entity_type'],
+                  'bundle' => $instance['bundle'],
+                  'settings' => $instance['settings'],
+                ],
+              ],
+            ],
+            'type' => 'setting',
+          ],
+          ctools_attach_js('photo_field_widget', 'foundation_photo'),
+        ],
+      ],
+    ];
+
+    $element += $widget;
+  }
+
+  return $element;
+}
+
+/**
+ * @param $element
+ * @return mixed
+ */
+function foundation_photo_field_photo_pre_render($element) {
+  if (!empty($element['#value'])) {
+    if ($file = file_load($element['#value'])) {
+      $file->realPath = file_create_url($file->uri);
+    }
+  }
+
+  $element['#attached'] = [
+    'js' => [
+      [
+        'data' => [
+          'fieldPhotoSettings' => [
+            $element['#field_name'] => [
+              'value' => [
+                $element['#delta'] => isset($file) ? $file : NULL
+              ],
+            ],
+          ],
+        ],
+        'type' => 'setting',
+      ],
+    ],
+  ];
+  return $element;
+}
+
+/**
+ * @see foundation_photo_field_widget_form()
+ */
+function foundation_photo_field_photo_validate($element, &$form_state, $form) {
+  if (!empty($element['#value'])) {
+    $field = reset($element['#array_parents']);
+
+    if (!property_exists($form_state['node'], $field)) {
+      $form_state['node']->{$field} = [];
+    }
+
+    drupal_array_set_nested_value($form_state['node']->{$field}, array_slice($element['#array_parents'], 1), $element['#value']);
+  }
+}
+
+/**
+ * Implements hook_field_load().
+ */
+function foundation_photo_field_load($entity_type, $entities, $field, $instances, $langcode, &$items, $age) {
+  module_load_include('inc', 'file', 'file.field');
+  file_field_load($entity_type, $entities, $field, $instances, $langcode, $items, $age);
+}
+
+/**
+ * Implements hook_field_presave().
+ */
+function foundation_photo_field_presave($entity_type, $entity, $field, $instance, $langcode, &$items) {
+  module_load_include('inc', 'file', 'file.field');
+  file_field_presave($entity_type, $entity, $field, $instance, $langcode, $items);
+}
+
+/**
+ * Implements hook_field_validate().
+ */
+function foundation_photo_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$error) {
+
+  ctools_include('modal');
+  ctools_include('ajax');
+  ctools_modal_add_js();
+
+  $invalid = TRUE;
+  foreach ($items as $delta => $item) {
+    if (is_array($item) && !empty($item["fid"])) {
+      $invalid = FALSE;
+    }
+  }
+
+  if ($instance["required"] && $invalid) {
+    $error[$field['field_name']][$langcode][0][] = array(
+      'error' => 'required_photo',
+      'message' => t('The field %field is required.', array('%field' => $instance['label']))
+    );
+  }
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function foundation_photo_field_formatter_info() {
+  return [
+    'photo_default' => [
+      'label' => 'Фото',
+      'field types' => ['photo'],
+      'settings' => [],
+    ],
+  ];
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function foundation_photo_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $result = array();
+  if ($display['type'] == 'photo_default') {
+
+    $settings = $instance['settings'];
+
+    foreach ($items as $delta => $item) {
+
+      $file = file_load($item['fid']);
+
+      $params = [
+        'path' => $file->uri,
+        'width' => $settings['width'],
+        'height' => $settings['height'],
+        'alt' => $file->filename,
+        'title' => $file->filename,
+      ];
+
+      $result[$delta] = [
+        '#markup' => theme('image', $params),
+      ];
+    }
+  }
+
+  return $result;
+}
+
+/**
+ * Implements hook_file_download().
+ */
+function foundation_photo_file_download($uri) {
+  return file_file_download($uri, 'photo');
+}
+
+/**
+ * Implements hook_menu().
+ */
+function foundation_photo_menu() {
+  return [
+    'photo/%ctools_js/%' => [
+      'page callback' => 'foundation_photo_ajax_actions',
+      'page arguments' => [1, 2],
+      'access callback' => TRUE,
+      'type' => MENU_CALLBACK,
+      'file' => 'foundation_photo.pages.inc'
+    ],
+  ];
+}
+
+/**
+ * Implements hook_theme().
+ */
+function foundation_photo_theme($existing, $type, $theme, $path) {
+  return [
+    'foundation_photo_take_photo_form' => [
+      'render element' => 'form',
+      'template' => 'templates/photo-take-form'
+    ],
+    'foundation_photo_upload_photo_form' => [
+      'render element' => 'form',
+      'template' => 'templates/photo-upload-form'
+    ],
+  ];
+}

@@ -1,0 +1,26 @@
+<?php
+
+/**
+ * Implements hook_field_schema().
+ */
+function foundation_photo_field_schema($field) {
+  return [
+    'columns' => [
+      'fid' => [
+        'description' => 'The {file_managed}.fid being referenced in this field.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'unsigned' => TRUE,
+      ],
+    ],
+    'indexes' => [
+      'fid' => ['fid'],
+    ],
+    'foreign keys' => [
+      'fid' => [
+        'table' => 'file_managed',
+        'columns' => ['fid' => 'fid'],
+      ],
+    ],
+  ];
+}
